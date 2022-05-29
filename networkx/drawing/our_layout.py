@@ -446,13 +446,17 @@ def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_l
 if __name__ == '__main__':
     import timeit
 
-    cy = timeit.timeit('nx.force_directed(nx.random_tree(30, 1), seed=1, iterations=10000, calculate=cc.calculate_for_all_nodes_cy)',
-                       setup='import networkx as nx\n'
-                             'import cy_calculation as cc',
-                       number=3)
-    py = timeit.timeit('nx.force_directed(nx.random_tree(30, 1), seed=1, iterations=10000)',
-                       setup='import networkx as nx',
-                       number=3)
-    print(f'cy = {cy}')
-    print(f'py = {py}')
-    print(f'Cython is {py / cy}x faster')
+    size = 10
+    for i in range(10):
+        cy = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=10000, '
+                           f'calculate=cc.calculate_for_all_nodes_cy)',
+                           setup='import networkx as nx\n'
+                                 'import cy_calculation as cc',
+                           number=60)
+        py = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=10000)',
+                           setup='import networkx as nx',
+                           number=60)
+        print(f'cy = {cy}')
+        print(f'py = {py}')
+        print(f'Cython is {py / cy}x faster')
+        size += 10
