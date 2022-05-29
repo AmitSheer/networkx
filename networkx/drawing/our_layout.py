@@ -16,7 +16,7 @@ from scipy.spatial import ConvexHull
 
 import networkx as nx
 import matplotlib.pyplot as plt
-
+import cy_calculation as cc
 from networkx.drawing import hypergraph_layout
 from networkx.drawing.hypergraph_layout import hyperedge, hypergraph
 
@@ -30,6 +30,17 @@ __all__ = [
     "force_directed_hyper_graphs_using_social_and_gravity_scaling",
     "force_directed"
 ]
+
+
+def calculate_for_all_nodes(A, pos, I, center, gamma_t, k, mass):
+    for v in range(len(A)):
+        delta = (pos[v] - pos).T
+        distance = np.sqrt((delta ** 2).sum(axis=0))
+        distance = np.where(distance < 0.01, 0.01, distance)
+        Ai = A[v]
+        # displacement "force"
+        I[:, v] += calculate_position_change_for_vertice(Ai, center, delta, distance, gamma_t, k, mass, pos, v)
+    return I
 
 
 def get_points_order(hull):
@@ -48,7 +59,7 @@ def get_points_order(hull):
 
 
 def force_directed(G: nx.Graph, seed: int, iterations: int = 50, threshold=70e-4, centrality=None, gravity: int = 6,
-                   gravity_multiplier: float = 20., dthreshold: float = 3):
+                   gravity_multiplier: float = 20., dthreshold: float = 3, calculate=calculate_for_all_nodes):
     """
 
     Parameters
@@ -105,13 +116,7 @@ def force_directed(G: nx.Graph, seed: int, iterations: int = 50, threshold=70e-4
     logger.info(f'Starting iterations: {iterations}, or until gravity force is {gravity * 20}')
     for iteration in range(iterations):
         I *= 0
-        for v in range(len(A)):
-            delta = (pos[v] - pos).T
-            distance = np.sqrt((delta ** 2).sum(axis=0))
-            distance = np.where(distance < 0.01, 0.01, distance)
-            Ai = A[v]
-            # displacement "force"
-            I[:, v] += calculate_position_change_for_vertice(Ai, center, delta, distance, gamma_t, k, mass, pos, v)
+        I = calculate(A, pos, I, center, gamma_t, k, mass)
         length = np.sqrt((I ** 2).sum(axis=0))
         length = np.where(length < 0.01, 0.1, length)
         delta_pos = (I * t / length).T
@@ -436,3 +441,18 @@ def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_l
         plt.title(title)
     plt.show()
     return pos
+
+
+if __name__ == '__main__':
+    import timeit
+
+    cy = timeit.timeit('nx.force_directed(nx.random_tree(30, 1), seed=1, iterations=10000, calculate=cc.calculate_for_all_nodes_cy)',
+                       setup='import networkx as nx\n'
+                             'import cy_calculation as cc',
+                       number=3)
+    py = timeit.timeit('nx.force_directed(nx.random_tree(30, 1), seed=1, iterations=10000)',
+                       setup='import networkx as nx',
+                       number=3)
+    print(f'cy = {cy}')
+    print(f'py = {py}')
+    print(f'Cython is {py / cy}x faster')
