@@ -9,6 +9,7 @@ link: https://www.researchgate.net/publication/318823299_Hypergraph_Drawing_by_F
 Our names: Amit Sheer Cohen and Neta Roth'''
 
 import math
+import threading
 
 import numpy
 import numpy as np
@@ -295,10 +296,89 @@ def random_color(brightness_threshold=0.2):
     return [red, green, blue]
 
 
+def draw_simplex(pos, indexes, ax):
+    from scipy.spatial import ConvexHull
+    from scipy.interpolate import splprep
+    from scipy.interpolate import splev
+    hull = ConvexHull(pos[indexes])
+    logger.info("Getting the edge positions")
+    new_hull = convex_pos(hull)
+    logger.info("Getting the order of the edges")
+    order = get_points_order(new_hull)
+    tmp_pos = new_hull.points[order]
+    logger.info("Smoothing the drawing")
+    # taken from https://stackoverflow.com/questions/31464345/fitting-a-closed-curve-to-a-set-of-points
+    tck, u = splprep(tmp_pos.T, u=None, s=0.0, per=1)
+    smooting_param = 1000
+    u_new = np.linspace(u.min(), u.max(), smooting_param)
+    x_new, y_new = splev(u_new, tck, der=0)
+    ax.plot(x_new, y_new, color=random_color(), zorder=0)
+
+
+def draw_ellipse(pos, indexes, ax):
+    from matplotlib.patches import Ellipse
+    x0 = pos[indexes][0][0]
+    y0 = pos[indexes][0][1]
+    x1 = pos[indexes][1][0]
+    y1 = pos[indexes][1][1]
+    dist_from_point = 0.03
+    height = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2) + dist_from_point
+    center = ((x0 + x1) / 2, (y0 + y1) / 2)
+    angle = angle_between(x0, x1, y0, y1)
+    ellipse = Ellipse(center, width=0.020, height=height, angle=angle + 90, fill=False, color=random_color())
+    ax.add_artist(ellipse)
+
+
+def draw_circle(pos, indexes, ax):
+    logger.info("Getting the circle size proportional to the canvas size")
+    proportion = 200
+    size = plt.gcf().get_size_inches()[0] / proportion
+    draw_circle = plt.Circle((pos[indexes][0][0], pos[indexes][0][1]), size, fill=False, color=random_color())
+    ax.add_artist(draw_circle)
+
+
+def active_with_threads(G, pos, ax):
+    threads = []
+    for ei in G.hyperedges:
+        logger.info(f'calculating convex hull for hyper-edge: {ei.vertices}')
+        indexes = []
+        for v in ei.vertices:
+            indexes.append(np.where(G.vertices == v)[0][0])
+        if len(indexes) >= 3:
+            t = threading.Thread(target=draw_simplex, args=[pos, indexes, ax])
+            t.start()
+            threads.append(t)
+        elif len(indexes) == 2:
+            t = threading.Thread(target=draw_ellipse, args=[pos, indexes, ax])
+            t.start()
+            threads.append(t)
+        elif len(indexes) == 1:
+            t = threading.Thread(target=draw_circle, args=[pos, indexes, ax])
+            t.start()
+            threads.append(t)
+    for t in threads:
+        t.join()
+
+
+def active_without_threads(G, pos, ax):
+    for ei in G.hyperedges:
+        logger.info(f'calculating convex hull for hyper-edge: {ei.vertices}')
+        indexes = []
+        for v in ei.vertices:
+            indexes.append(np.where(G.vertices == v)[0][0])
+        if len(indexes) >= 3:
+            draw_simplex(pos, indexes, ax)
+        elif len(indexes) == 2:
+            draw_ellipse(pos, indexes, ax)
+        elif len(indexes) == 1:
+            draw_circle(pos, indexes, ax)
+
+
 # @nx.not_implemented_for("directed")
 def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_layout.hypergraph,
                                                                  iterations=50, threshold=70e-4, centrality=None,
-                                                                 graph_type=None, gravity=6, seed=None, title=None):
+                                                                 graph_type=None, gravity=6, seed=None, title=None,
+                                                                 with_threads=True):
     """Positions nodes using Fruchterman-Reingold force-directed algorithm combined with Hyper-Graphs and Social and
     Gravitational Forces.
 
@@ -366,12 +446,7 @@ def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_l
 
     """
     import matplotlib.pyplot as plt
-    from scipy.spatial import ConvexHull
-    from scipy.interpolate import splprep
-    from scipy.interpolate import splev
-    from matplotlib.patches import Ellipse
-    import math
-
+    import time
     if graph_type is None:
         graph_type = hypergraph_layout.complete_algorithm
     logger.info(f'graph type to convert hyper-graph to: {graph_type}')
@@ -391,44 +466,10 @@ def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_l
     size = plt.gcf().get_size_inches()[0]
     ax.scatter(pos[:, 0], pos[:, 1], s=size, zorder=2)
     logger.info(f'generating the visual plot for the graph')
-    for ei in G.hyperedges:
-        logger.info(f'calculating convex hull for hyper-edge: {ei.vertices}')
-        indexes = []
-        for v in ei.vertices:
-            indexes.append(np.where(G.vertices == v)[0][0])
-        if len(indexes) >= 3:
-            hull = ConvexHull(pos[indexes])
-            logger.info("Getting the edge positions")
-            new_hull = convex_pos(hull)
-            logger.info("Getting the order of the edges")
-            order = get_points_order(new_hull)
-            tmp_pos = new_hull.points[order]
-            logger.info("Smoothing the drawing")
-            # taken from https://stackoverflow.com/questions/31464345/fitting-a-closed-curve-to-a-set-of-points
-            tck, u = splprep(tmp_pos.T, u=None, s=0.0, per=1)
-            smooting_param = 1000
-            u_new = np.linspace(u.min(), u.max(), smooting_param)
-            x_new, y_new = splev(u_new, tck, der=0)
-
-            ax.plot(x_new, y_new, color=random_color(), zorder=0)
-        elif len(indexes) == 2:
-            x0 = pos[indexes][0][0]
-            y0 = pos[indexes][0][1]
-            x1 = pos[indexes][1][0]
-            y1 = pos[indexes][1][1]
-            dist_from_point = 0.03
-            height = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2) + dist_from_point
-            center = ((x0 + x1) / 2, (y0 + y1) / 2)
-            angle = angle_between(x0, x1, y0, y1)
-            ellipse = Ellipse(center, width=0.020, height=height, angle=angle + 90, fill=False, color=random_color())
-            ax.add_artist(ellipse)
-        elif len(indexes) == 1:
-            logger.info("Getting the circle size proportional to the canvas size")
-            proportion = 200
-            size = plt.gcf().get_size_inches()[0] / proportion
-            draw_circle = plt.Circle((pos[indexes][0][0], pos[indexes][0][1]), size, fill=False, color=random_color())
-            ax.add_artist(draw_circle)
-
+    if with_threads:
+        active_with_threads(G, pos, ax)
+    else:
+        active_without_threads(G, pos, ax)
     logger.info("drawing vertices' numbers")
     for i, txt in enumerate(G.vertices):
         ax.annotate(txt, pos[i], color='blue')
