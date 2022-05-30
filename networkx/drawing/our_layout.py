@@ -443,20 +443,71 @@ def force_directed_hyper_graphs_using_social_and_gravity_scaling(G: hypergraph_l
     return pos
 
 
+def run(size):
+    import time
+    g = nx.random_regular_graph(10, size)
+    # print(f'{size}')
+    cy = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=2000, '
+                       f'calculate=cc.calculate_for_all_nodes_cy)',
+                       setup='import networkx as nx\n'
+                             'import cy_calculation as cc',
+                       number=10)
+    py = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=2000)',
+                       setup='import networkx as nx',
+                       number=10)
+    print("------------------")
+    print(f"Graph with {size} vertices")
+    print(f"Cython took {cy} seconds")
+    print(f"Python took {py} seconds")
+    return cy, py
+    # g = nx.random_tree(size, 1)
+    # start1 = time.perf_counter()
+    # nx.force_directed(g, seed=1, iterations=2000, calculate=cc.calculate_for_all_nodes_cy)
+    # finish1 = time.perf_counter()
+    # start2 = time.perf_counter()
+    # nx.force_directed(g, seed=1, iterations=2000)
+    # finish2 = time.perf_counter()
+    # print("------------------")
+    # print(f"Graph with {size} vertices")
+    # print(f"Cython took {(finish1 - start1)} seconds")
+    # print(f"Python took {(finish2 - start2)} seconds")
+    # return (finish1 - start1), (finish2 - start2)
+
+
 if __name__ == '__main__':
     import timeit
+    import matplotlib.patches as mpatches
 
-    size = 10
-    for i in range(10):
-        cy = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=10000, '
-                           f'calculate=cc.calculate_for_all_nodes_cy)',
-                           setup='import networkx as nx\n'
-                                 'import cy_calculation as cc',
-                           number=60)
-        py = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=10000)',
-                           setup='import networkx as nx',
-                           number=60)
-        print(f'cy = {cy}')
-        print(f'py = {py}')
+    runs = 20
+    size = 20
+    py_arr = []
+    cy_arr = []
+    for i in range(1, runs + 1):
+        cy, py = run(size)
+        # cy = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=2000, '
+        #                    f'calculate=cc.calculate_for_all_nodes_cy)',
+        #                    setup='import networkx as nx\n'
+        #                          'import cy_calculation as cc',
+        #                    number=1)
+        # py = timeit.timeit(f'nx.force_directed(nx.random_tree({size}, 1), seed=1, iterations=2000)',
+        #                    setup='import networkx as nx',
+        #                    number=1)
+        # print(f'cy = {cy}')
+        # print(f'py = {py}')
         print(f'Cython is {py / cy}x faster')
-        size += 10
+        py_arr.append(py)
+        cy_arr.append(cy)
+        size += 5
+    print(f'cy arr: {cy_arr}')
+    print(f'py arr: {py_arr}')
+    fig, ax = plt.subplots()
+    plt.xlabel("Number of Nodes")
+    plt.ylabel("Time in seconds")
+    plt.title("Normal Graph for comparison Cython and Python")
+    for i, j in enumerate(range(1, runs)):
+        plt.plot([j * 5 + 20, (j + 1) * 5 + 20], [cy_arr[i], cy_arr[i + 1]], 'r')
+        plt.plot([j * 5 + 20, (j + 1) * 5 + 20], [py_arr[i], py_arr[i + 1]], 'b')
+    red_patch = mpatches.Patch(color='red', label='Cython improvement')
+    blue_patch = mpatches.Patch(color='blue', label='Pure Python improvement')
+    ax.legend(handles=[red_patch, blue_patch])
+    plt.show()
